@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 )
 
@@ -17,15 +18,37 @@ func fetch(_ context.Context, user User) (string, error) {
 
 func process(ctx context.Context, users []User) (map[string]int, error) {
 	names := make(map[string]int, 0)
+	mu := sync.Mutex{}
+	wg := sync.WaitGroup{}
+	wg.Add(len(users))
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var commonError error
 
 	for _, u := range users {
-		name, err := fetch(ctx, u)
-		if err != nil {
-		}
+		go func() {
+			defer wg.Done()
 
-		names[name] = names[name] + 1
+			name, err := fetch(ctx, u)
+			if err != nil {
+				sync.OnceFunc(func() {
+					cancel()
+					commonError = err
+				})
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			names[name] = names[name] + 1
+		}()
 	}
 
+	wg.Wait()
+	if commonError != nil {
+		return nil, commonError
+	}
 	return names, nil
 }
 

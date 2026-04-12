@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type User struct {
@@ -17,13 +20,28 @@ func fetch(_ context.Context, user User) (string, error) {
 
 func process(ctx context.Context, users []User) (map[string]int, error) {
 	names := make(map[string]int, 0)
+	mu := sync.Mutex{}
+
+	egroup, ectx := errgroup.WithContext(ctx)
+	// limit of active goroutines
+	egroup.SetLimit(100)
 
 	for _, u := range users {
-		name, err := fetch(ctx, u)
-		if err != nil {
-		}
+		egroup.Go(func() error {
+			name, err := fetch(ectx, u)
+			if err != nil {
+				return err
+			}
 
-		names[name] = names[name] + 1
+			mu.Lock()
+			defer mu.Unlock()
+			names[name] = names[name] + 1
+			return nil
+		})
+	}
+
+	if err := egroup.Wait(); err != nil {
+		return nil, err
 	}
 
 	return names, nil

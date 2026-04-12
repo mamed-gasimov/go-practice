@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+// it takes 40ms
+// 1. make requests concurrent
+// 2. stop all requests one time
+
 type User struct {
 	Name string
 }
